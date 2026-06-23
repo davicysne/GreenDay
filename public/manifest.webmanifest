@@ -1,0 +1,12 @@
+{
+  "name": "Green Day",
+  "short_name": "Green Day",
+  "description": "Track your recovery journey and stay away from gambling.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f8f6",
+  "theme_color": "#174f2d",
+  "icons": [
+    { "src": "/favicon.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

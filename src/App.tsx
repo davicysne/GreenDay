@@ -1,0 +1,209 @@
+// @ts-nocheck -- legacy monolithic presentation; typed service modules hold persistence contracts.
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Activity, BarChart3, BookOpen, CalendarDays, Check, ChevronDown, CircleDollarSign,
+  Clock3, Flame, Globe2, Heart, Home, Leaf, LogOut, Menu, MessageCircle, Plus,
+  RotateCcw, Settings, ShieldCheck, Sparkles, Target, TrendingUp, Users, X, Zap, Crown, Bell, LockKeyhole
+} from 'lucide-react'
+import {
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis
+} from 'recharts'
+import { getText, Language } from './i18n'
+import { posts, progressData, triggerData } from './data/mock'
+import PremiumGate from './components/PremiumGate'
+import SettingsPage from './components/SettingsPage'
+import GoalsPage from './components/GoalsPage'
+import SurveyOnboarding from './components/SurveyOnboarding'
+import { getStoredProfile, SurveyAnswers } from './lib/profile'
+import { signIn, signOut as authSignOut, signUp, ProfileInput } from './lib/auth'
+import { BillingPlan, basePrices, localizePrice, startCheckout } from './lib/billing'
+import { enablePush, saveNotificationPreferences } from './lib/notifications'
+import { supabase } from './lib/supabase'
+
+type Page = 'dashboard' | 'goals' | 'journal' | 'reports' | 'relapses' | 'community' | 'insights' | 'pricing' | 'settings'
+type AuthMode = 'login' | 'signup'
+
+const IconButton = ({ children, label, onClick, className = '' }: { children: React.ReactNode, label: string, onClick?: () => void, className?: string }) => (
+  <button className={`icon-button ${className}`} aria-label={label} onClick={onClick}>{children}</button>
+)
+
+function Brand({ light = false }: { light?: boolean }) {
+  return <div className={`brand ${light ? 'brand-light' : ''}`}><span className="brand-mark"><Leaf size={19} /></span><span>Green Day</span></div>
+}
+
+function Auth({ onLogin, language, setLanguage }: { onLogin: (newUser: boolean, email: string, password: string, profile?: ProfileInput) => Promise<void>, language: Language, setLanguage: (l: Language) => void }) {
+  const [mode, setMode] = useState<AuthMode>('login')
+  const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
+  const t = getText(language)
+  const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  const detectedCountry = language === 'pt' ? 'BR' : language === 'es' ? 'ES' : 'US'
+  const detectedCurrency = detectedCountry === 'BR' ? 'BRL' : detectedCountry === 'ES' ? 'EUR' : 'USD'
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setError('')
+    const form = new FormData(event.currentTarget)
+    try {
+      await onLogin(mode === 'signup', String(form.get('email')), String(form.get('password')), mode === 'signup' ? {
+        display_name: String(form.get('name')), country: String(form.get('country')), language: String(form.get('language')),
+        currency: String(form.get('currency')), timezone: String(form.get('timezone')),
+      } : undefined)
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'We could not sign you in.') }
+  }
+  return <main className="auth-shell">
+    <section className="auth-story">
+      <Brand light />
+      <div className="auth-story-copy">
+        <span className="eyebrow light"><Sparkles size={14}/> A calmer way forward</span>
+        <h1>Your next chapter<br/>starts <em>today.</em></h1>
+        <p>A private, judgment-free space to understand your patterns, celebrate progress, and take back control.</p>
+      </div>
+      <div className="auth-quote">
+        <div className="quote-icon">“</div>
+        <p>I stopped counting what I had lost and started noticing what I was getting back.</p>
+        <span>— Green Day member, 42 days bet-free</span>
+      </div>
+      <div className="story-orb orb-one"/><div className="story-orb orb-two"/>
+    </section>
+    <section className="auth-form-wrap">
+      <div className="auth-language">
+        <Globe2 size={16}/>
+        <select value={language} onChange={e=>setLanguage(e.target.value as Language)} aria-label="Language">
+          <option value="en">English</option><option value="pt">Português</option><option value="es">Español</option>
+        </select>
+      </div>
+      <div className="auth-card">
+        <div className="mobile-brand"><Brand /></div>
+        <span className="auth-kicker">{mode === 'login' ? 'WELCOME BACK' : 'START YOUR JOURNEY'}</span>
+        <h2>{mode === 'login' ? 'Keep choosing yourself.' : 'Build a life beyond betting.'}</h2>
+        <p>{mode === 'login' ? 'Sign in to continue your progress.' : 'Private by design. Progress at your pace.'}</p>
+        <form onSubmit={submit}>
+          {mode === 'signup' && <><label>{t.yourName}<input name="name" required placeholder="How should we call you?" /></label><div className="signup-profile-grid"><label>{t.country}<select name="country" defaultValue={detectedCountry}><option value="US">United States</option><option value="BR">Brazil</option><option value="ES">Spain</option><option value="MX">Mexico</option><option value="GB">United Kingdom</option></select></label><label>{t.languageLabel}<select name="language" defaultValue={language==='pt'?'pt-BR':language}><option value="en">English</option><option value="pt-BR">Português (Brasil)</option><option value="es">Español</option></select></label><label>{t.currency}<select name="currency" defaultValue={detectedCurrency}><option>USD</option><option>BRL</option><option>EUR</option><option>MXN</option><option>GBP</option></select></label><label>{t.timezone}<input name="timezone" defaultValue={detectedTimezone}/></label></div></>}
+          <label>Email address<input name="email" required type="email" placeholder="you@example.com" defaultValue={mode === 'login' ? 'alex@example.com' : ''}/></label>
+          <label>Password
+            <div className="password-field"><input name="password" required minLength={8} type={showPassword?'text':'password'} placeholder="At least 8 characters" defaultValue={mode === 'login' ? 'greenday123' : ''}/><button type="button" onClick={()=>setShowPassword(!showPassword)}>{showPassword?'Hide':'Show'}</button></div>
+          </label>
+          {mode === 'login' && <div className="form-row"><label className="checkbox"><input type="checkbox" defaultChecked/> Remember me</label><button type="button" className="text-button">Forgot password?</button></div>}
+          {error&&<div className="form-error">{error}</div>}<button className="primary wide" type="submit">{mode === 'login' ? 'Sign in' : 'Create my account'} <span>→</span></button>
+        </form>
+        <div className="auth-switch">{mode === 'login' ? "New to Green Day?" : 'Already have an account?'} <button onClick={()=>setMode(mode==='login'?'signup':'login')}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></div>
+        <div className="privacy-note"><ShieldCheck size={16}/><span>Your data is private and never shared. <b>Learn more</b></span></div>
+      </div>
+    </section>
+  </main>
+}
+
+function Onboarding({ onDone }: { onDone: () => void }) {
+  const [step, setStep] = useState(1)
+  const [goal, setGoal] = useState('Pay off debt')
+  return <main className="onboarding-shell">
+    <header><Brand/><span>Step {step} of 3</span></header>
+    <div className="progress-track"><i style={{width:`${step/3*100}%`}}/></div>
+    <section className="onboarding-card">
+      <span className="eyebrow"><Leaf size={14}/> YOUR STARTING POINT</span>
+      {step===1 && <><h1>Let’s understand your story.</h1><p>There are no wrong answers. This helps us make Green Day useful for you.</p><div className="form-grid"><label>How long have you been betting?<select defaultValue="1–3 years"><option>Less than 6 months</option><option>6–12 months</option><option>1–3 years</option><option>More than 3 years</option></select></label><label>Typical weekly spend<input type="number" defaultValue="150"/><span className="input-prefix">$</span></label><label>Bet-free start date<input type="date" defaultValue={new Date().toISOString().slice(0,10)}/></label><label>Your main trigger<select><option>Stress</option><option>Boredom</option><option>Money worries</option><option>Social pressure</option><option>Sports events</option></select></label></div></>}
+      {step===2 && <><h1>What are you moving toward?</h1><p>A meaningful goal can become your anchor on difficult days.</p><div className="goal-options">{['Pay off debt','Save money','Improve mental health','Regain control'].map((g,i)=><button key={g} className={goal===g?'selected':''} onClick={()=>setGoal(g)}><span>{[<CircleDollarSign/>,<TrendingUp/>,<Heart/>,<Target/>][i]}</span><b>{g}</b><small>{['Create breathing room and financial freedom','Build a future that feels secure','Feel calmer, present, and more like yourself','Make choices from clarity, not impulse'][i]}</small><Check className="goal-check"/></button>)}</div></>}
+      {step===3 && <div className="ready-state"><span className="ready-icon"><Sparkles/></span><h1>You’re ready, Alex.</h1><p>Small steps add up. Your dashboard will help you see every bit of progress — including the parts that are easy to miss.</p><div className="ready-summary"><div><span>Starting today</span><b>Your bet-free journey</b></div><div><span>Your main goal</span><b>{goal}</b></div></div></div>}
+      <footer><button className="secondary" onClick={()=>step>1&&setStep(step-1)} disabled={step===1}>Back</button><button className="primary" onClick={()=>step<3?setStep(step+1):onDone()}>{step<3?'Continue':'Open my dashboard'} <span>→</span></button></footer>
+    </section>
+    <p className="onboarding-foot"><ShieldCheck size={14}/> You can change these details anytime in Settings.</p>
+  </main>
+}
+
+function Sidebar({ page, setPage, t, onLogout, open, setOpen, premium }: { page: Page, setPage:(p:Page)=>void, t:ReturnType<typeof getText>, onLogout:()=>void, open:boolean, setOpen:(x:boolean)=>void, premium:boolean }) {
+  const items: [Page, React.ElementType, string][] = [['dashboard',Home,t.dashboard],['goals',Target,t.goals],['journal',BookOpen,t.journal],['reports',BarChart3,t.reports],['relapses',RotateCcw,t.relapses],['community',Users,t.community],['insights',Activity,t.insights]]
+  return <><div className={`sidebar-overlay ${open?'show':''}`} onClick={()=>setOpen(false)}/><aside className={`sidebar ${open?'open':''}`}>
+    <div className="sidebar-top"><Brand/><IconButton label="Close menu" onClick={()=>setOpen(false)} className="sidebar-close"><X size={20}/></IconButton></div>
+    <nav>{items.map(([id,Icon,label])=><button key={id} className={page===id?'active':''} onClick={()=>{setPage(id);setOpen(false)}}><Icon size={19}/><span>{label}</span>{id==='community'&&<i>3</i>}</button>)}</nav>
+    <div className="sidebar-lower">{!premium&&<button className="upgrade-sidebar" onClick={()=>setPage('pricing')}><Crown size={18}/><span>{t.upgradePremium}</span></button>}<div className="streak-card"><div><Flame size={18}/><b>14 day streak</b></div><p>One day at a time. You’re doing it.</p><div className="streak-dots">{[1,2,3,4,5,6,7].map(x=><i key={x}/>)}</div></div><button onClick={()=>setPage('settings')}><Settings size={19}/><span>{t.settings}</span></button><button onClick={onLogout}><LogOut size={19}/><span>Sign out</span></button></div>
+  </aside></>
+}
+
+function Header({ title, language, setLanguage, setMenu, onOpenSettings, name }: { title:string, language:Language, setLanguage:(l:Language)=>void, setMenu:(x:boolean)=>void, onOpenSettings:()=>void, name:string }) {
+  const t=getText(language),preferences=JSON.parse(localStorage.getItem('gd-notifications')||'null'),[open,setOpen]=useState(false),[read,setRead]=useState(false)
+  const notifications=preferences?.enabled?[{title:t.checkinReminder,body:t.firstMessage,time:preferences.first_notification_time||'09:00'},{title:t.progressReminder,body:t.rememberWhy,time:preferences.second_notification_time||'20:00'}]:[]
+  const initials=name.split(' ').map(part=>part[0]).slice(0,2).join('').toUpperCase()
+  return <header className="app-header"><IconButton label="Open menu" onClick={()=>setMenu(true)} className="menu-button"><Menu/></IconButton><div className="mobile-title">{title}</div><div className="header-actions"><label className="language-select"><Globe2 size={16}/><select value={language} onChange={e=>setLanguage(e.target.value as Language)}><option value="en">EN</option><option value="pt">PT-BR</option><option value="es">ES</option></select><ChevronDown size={14}/></label><div className="notifications-wrap"><IconButton label={t.notificationsTitle} onClick={()=>setOpen(!open)}><Bell size={19}/>{notifications.length>0&&!read&&<i/>}</IconButton>{open&&<div className="notifications-dropdown"><header><div><h3>{t.notificationsTitle}</h3><small>{preferences?.enabled?t.notificationsOn:t.notificationsOff}</small></div>{notifications.length>0&&!read&&<button onClick={()=>setRead(true)}>{t.markAllRead}</button>}</header><div className="notifications-list">{notifications.length===0?<div className="notifications-empty"><Bell/><p>{t.noNotifications}</p></div>:notifications.map(notification=><article className={read?'read':''} key={notification.title}><span><Bell/></span><div><b>{notification.title}</b><p>{notification.body}</p><small>{notification.time}{!read&&<> · {t.unread}</>}</small></div></article>)}</div><button className="notification-settings-link" onClick={()=>{setOpen(false);onOpenSettings()}}><Settings/>{t.goToNotificationSettings}<span>→</span></button></div>}</div><button className="profile-button"><span>{initials}</span><div><b>{name}</b><small>alex@example.com</small></div><ChevronDown size={14}/></button></div></header>
+}
+
+function StatCard({ icon:Icon, label, value, note, tone='green' }: {icon:React.ElementType,label:string,value:string,note:string,tone?:string}) {
+  return <article className="stat-card"><span className={`stat-icon ${tone}`}><Icon size={21}/></span><div><small>{label}</small><strong>{value}</strong><p>{note}</p></div></article>
+}
+
+function Dashboard({ t, onEmergency, goJournal, profile, currency }: {t:ReturnType<typeof getText>,onEmergency:()=>void,goJournal:()=>void,profile:SurveyAnswers|null,currency:string}) {
+  const displayDays=profile?(profile.recovery_status==='already_stopped'?profile.sober_days:0):14,savedAmount=profile?Math.round(profile.average_gambling_spend/7*displayDays):642
+  const objective=profile?.main_objective?({pay_debt:t.payDebt,save_money:t.saveMoney,mental_health:t.mentalHealth,regain_control:t.regainControl} as Record<string,string>)[profile.main_objective]:t.debt
+  return <div className="page dashboard-page">
+    <section className="welcome-row"><div><span className="eyebrow"><Leaf size={14}/> {t.focusToday}: {objective}</span><h1>{t.goodMorning}, {profile?.display_name||'Alex'} <span>👋</span></h1><p>{profile?.biggest_difficulty?`${t.subtitle} ${profile.biggest_difficulty}.`:t.subtitle}</p></div><button className="secondary check-button" onClick={goJournal}><Plus size={17}/>{t.addEntry}</button></section>
+    <section className="stats-grid"><article className="hero-stat"><div className="hero-stat-top"><span><CalendarDays size={23}/></span><small>CURRENT STREAK</small></div><div className="hero-number"><strong>{displayDays}</strong><span>{t.daysPersonalized}</span></div><div className="mini-calendar">{['M','T','W','T','F','S','S'].map((d,i)=><div key={i}><small>{d}</small><i className={i<Math.min(7,displayDays)?'done':''}><Check size={11}/></i></div>)}</div></article><StatCard icon={CircleDollarSign} label={t.saved} value={new Intl.NumberFormat(undefined,{style:'currency',currency,maximumFractionDigits:0}).format(savedAmount)} note={t.suggestedFromSurvey}/><StatCard icon={Flame} label={t.streak} value="21 days" note="Just 7 days away" tone="amber"/><StatCard icon={Zap} label={t.urges} value="18" note={profile?`${profile.current_urge_level}/10 ${t.currentUrge}`:'3 this week'} tone="blue"/></section>
+    <button className="emergency-banner" onClick={onEmergency}><span className="pulse-icon"><Heart size={25}/></span><div><strong>{t.emergency}</strong><small>{t.emergencyHint}</small></div><i>Open support <span>→</span></i></button>
+    <section className="dashboard-main"><div className="chart-card"><div className="section-heading"><div><span className="eyebrow">PROGRESS</span><h2>{t.journey}</h2></div><button>{t.lastDays}<ChevronDown size={14}/></button></div><div className="chart-legend"><span><i className="mood-dot"/>{t.mood}</span><span><i className="urge-dot"/>{t.urge}</span></div><ResponsiveContainer width="100%" height={238}><AreaChart data={progressData} margin={{top:8,right:8,left:-28,bottom:0}}><defs><linearGradient id="moodFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4d9a63" stopOpacity={.25}/><stop offset="100%" stopColor="#4d9a63" stopOpacity={0}/></linearGradient></defs><CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#e8ece8"/><XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize:12,fill:'#849087'}}/><YAxis domain={[0,10]} axisLine={false} tickLine={false} tick={{fontSize:11,fill:'#9aa39c'}}/><Tooltip contentStyle={{borderRadius:12,border:'1px solid #e1e8e2',boxShadow:'0 8px 20px #17351f12'}}/><Area type="monotone" dataKey="mood" stroke="#347b4a" strokeWidth={3} fill="url(#moodFill)"/><Line type="monotone" dataKey="urge" stroke="#c1c8c2" strokeWidth={2} strokeDasharray="5 5" dot={false}/></AreaChart></ResponsiveContainer></div>
+      <aside className="side-stack"><div className="goal-card"><div className="section-heading"><div><span className="eyebrow">FOCUS</span><h2>{t.currentGoal}</h2></div><span className="goal-icon"><Target size={20}/></span></div><h3>{t.debt}</h3><p>$1,820 of $5,000 saved</p><div className="goal-progress"><i/></div><div className="goal-numbers"><span>36%</span><small>$3,180 to go</small></div></div><div className="checkin-card"><span className="checkin-icon"><BookOpen size={21}/></span><div><h3>{t.checkin}</h3><p>{t.checkinHint}</p><button onClick={goJournal}>{t.start}<span>→</span></button></div></div></aside></section>
+    <section className="wins-card"><div className="section-heading"><div><span className="eyebrow">MOMENTS THAT MATTER</span><h2>{t.recent}</h2></div><button className="text-button">{t.viewAll} →</button></div><div className="wins-list"><div><span className="win-icon"><ShieldCheck/></span><p><b>Resisted a strong urge</b><small>Used the 60-second reset instead</small></p><time>{t.today}, 2:40 PM</time></div><div><span className="win-icon pale"><CircleDollarSign/></span><p><b>Passed $600 saved</b><small>A meaningful step toward your goal</small></p><time>Yesterday</time></div><div><span className="win-icon gold"><Flame/></span><p><b>Two weeks bet-free</b><small>Your consistency is building momentum</small></p><time>2 days ago</time></div></div></section>
+  </div>
+}
+
+function Journal({t,userId}:{t:ReturnType<typeof getText>,userId:string}) {
+  const [mood,setMood]=useState(7), [urge,setUrge]=useState(3), [saved,setSaved]=useState(false)
+  const saveCheckin=async()=>{if(supabase&&userId!=='demo-user')await supabase.from('daily_checkins').insert({user_id:userId,mood,felt_urge:urge>0,urge_level:urge,note:''});setSaved(true)}
+  return <div className="page"><PageTitle eyebrow="CHECK IN WITH YOURSELF" title={t.journalTitle} subtitle={t.journalSub}/><div className="two-column"><section className="panel journal-form"><div className="date-pill"><CalendarDays size={16}/> Today, June 22</div><h2>How are you feeling?</h2><div className="mood-picker">{[['😞','Rough'],['😕','Low'],['😐','Okay'],['🙂','Good'],['😊','Great']].map(([e,l],i)=><button key={l} className={mood===i+4?'active':''} onClick={()=>setMood(i+4)}><span>{e}</span><small>{l}</small></button>)}</div><label className="range-label"><span><b>Urge to gamble</b><strong>{urge}/10</strong></span><input type="range" min="0" max="10" value={urge} onChange={e=>setUrge(+e.target.value)}/><div><small>None</small><small>Very strong</small></div></label><label>Main trigger<select><option>Stress</option><option>Boredom</option><option>Money worries</option><option>Sports event</option><option>None today</option></select></label><label>What is on your mind?<textarea placeholder="Write freely. This is only for you..."/></label><label className="toggle-row"><span><b>Did you gamble today?</b><small>Honesty helps you understand your patterns.</small></span><input type="checkbox"/></label><button className="primary wide" onClick={saveCheckin}>{saved?<><Check size={18}/> Check-in saved</>:'Save today’s check-in'}</button></section><aside className="journal-aside"><div className="gentle-card"><span>🌿</span><h3>A gentle reminder</h3><p>You do not have to feel good to be making progress. Showing up honestly is enough for today.</p></div><div className="panel week-list"><h3>This week</h3>{progressData.slice().reverse().slice(0,5).map((x,i)=><div key={x.day}><span className={i===0?'today-dot':''}>{i===0?'T':['S','F','T','W'][i-1]}</span><p><b>{i===0?'Today':x.day}</b><small>Mood {x.mood}/10 · Urge {x.urge}/10</small></p><Check size={16}/></div>)}</div></aside></div></div>
+}
+
+function PageTitle({eyebrow,title,subtitle,action}:{eyebrow:string,title:string,subtitle:string,action?:React.ReactNode}) {return <section className="page-title"><div><span className="eyebrow"><Leaf size={14}/>{eyebrow}</span><h1>{title}</h1><p>{subtitle}</p></div>{action}</section>}
+
+function Reports({t}:{t:ReturnType<typeof getText>}) {return <div className="page"><PageTitle eyebrow="THE BIGGER PICTURE" title={t.reportsTitle} subtitle={t.reportsSub} action={<button className="secondary"><CalendarDays size={16}/> Last 30 days <ChevronDown size={14}/></button>}/><div className="report-stats"><StatCard icon={CalendarDays} label="Bet-free days" value="27 / 30" note="90% success rate"/><StatCard icon={CircleDollarSign} label="Money saved" value="$1,284" note="+$418 this month"/><StatCard icon={TrendingUp} label="Average mood" value="7.4" note="Up 18%"/></div><div className="reports-grid"><section className="panel report-wide"><div className="section-heading"><div><span className="eyebrow">WELLBEING</span><h2>Mood & urge patterns</h2></div></div><ResponsiveContainer width="100%" height={280}><LineChart data={progressData} margin={{top:15,right:12,left:-25,bottom:0}}><CartesianGrid vertical={false} stroke="#e8ece8"/><XAxis dataKey="day" axisLine={false} tickLine={false}/><YAxis domain={[0,10]} axisLine={false} tickLine={false}/><Tooltip/><Line dataKey="mood" stroke="#2f7b46" strokeWidth={3} dot={{fill:'#2f7b46',r:4}}/><Line dataKey="urge" stroke="#b4bcb6" strokeWidth={2} strokeDasharray="5 5"/></LineChart></ResponsiveContainer></section><section className="panel"><div className="section-heading"><div><span className="eyebrow">PATTERNS</span><h2>Top triggers</h2></div></div><ResponsiveContainer width="100%" height={205}><PieChart><Pie data={triggerData} innerRadius={55} outerRadius={78} paddingAngle={3} dataKey="value">{triggerData.map(x=><Cell key={x.name} fill={x.color}/>)}</Pie><Tooltip/></PieChart></ResponsiveContainer><div className="trigger-legend">{triggerData.map(x=><span key={x.name}><i style={{background:x.color}}/>{x.name}<b>{x.value}%</b></span>)}</div></section><section className="panel report-wide"><div className="section-heading"><div><span className="eyebrow">FINANCIAL RECOVERY</span><h2>Money kept, not lost</h2></div></div><ResponsiveContainer width="100%" height={230}><AreaChart data={progressData} margin={{top:10,right:12,left:-15,bottom:0}}><defs><linearGradient id="saveFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#65a978" stopOpacity={.35}/><stop offset="1" stopColor="#65a978" stopOpacity={0}/></linearGradient></defs><CartesianGrid vertical={false} stroke="#edf0ed"/><XAxis dataKey="day" axisLine={false} tickLine={false}/><YAxis tickFormatter={x=>`$${x}`} axisLine={false} tickLine={false}/><Tooltip/><Area dataKey="saved" stroke="#347b4a" strokeWidth={3} fill="url(#saveFill)"/></AreaChart></ResponsiveContainer></section></div></div>}
+
+function Relapses({t}:{t:ReturnType<typeof getText>}) {const [open,setOpen]=useState(false);return <div className="page"><PageTitle eyebrow="HONESTY WITHOUT SHAME" title={t.relapseTitle} subtitle={t.relapseSub} action={<button className="primary" onClick={()=>setOpen(true)}><Plus size={17}/>{t.addRelapse}</button>}/><div className="compassion-banner"><span>🌱</span><div><b>{t.relapseMsg}</b><p>A hard day is one page — not the whole story.</p></div></div><section className="panel relapse-list"><div className="section-heading"><div><span className="eyebrow">YOUR HISTORY</span><h2>Past entries</h2></div></div><div className="relapse-row"><span className="relapse-date"><b>08</b><small>JUN</small></span><div><b>Sports event · $80 lost</b><p>“I was stressed after work and saw an ad before the match.”</p><small><Clock3 size={13}/> Sunday · 8:30 PM</small></div><span className="learned">What I learned</span></div><div className="relapse-row"><span className="relapse-date"><b>21</b><small>MAY</small></span><div><b>Money worries · $45 lost</b><p>“I thought a quick win would help with the bills.”</p><small><Clock3 size={13}/> Wednesday · 11:15 PM</small></div><span className="learned">What I learned</span></div></section>{open&&<SimpleModal title="Log a relapse" onClose={()=>setOpen(false)}><p>This is a judgment-free record. The goal is understanding, not punishment.</p><label>Date<input type="date" defaultValue="2026-06-22"/></label><label>Amount lost<input type="number" placeholder="$ 0.00"/></label><label>Main trigger<select><option>Stress</option><option>Boredom</option><option>Money worries</option><option>Sports event</option></select></label><label>What happened?<textarea placeholder="Write what you remember..."/></label><button className="primary wide" onClick={()=>setOpen(false)}>Save privately</button></SimpleModal>}</div>}
+
+function Community({t}:{t:ReturnType<typeof getText>}) {const [list,setList]=useState(posts),[open,setOpen]=useState(false);const support=(id:number)=>setList(list.map(p=>p.id===id?{...p,support:p.support+1}:p));return <div className="page"><PageTitle eyebrow="ANONYMOUS COMMUNITY" title={t.communityTitle} subtitle={t.communitySub} action={<button className="primary" onClick={()=>setOpen(true)}><Plus size={17}/>{t.share}</button>}/><div className="community-layout"><section className="post-feed">{list.map(p=><article className="post-card" key={p.id}><header><span className="anon-avatar">{p.avatar}</span><div><b>Anonymous member</b><small>{p.time}</small></div><span className="post-tag">{p.tag}</span></header><p>{p.text}</p><footer><button onClick={()=>support(p.id)}><Heart size={17}/>{t.support} · {p.support}</button><span><MessageCircle size={16}/> You’re seen here</span></footer></article>)}</section><aside><div className="community-note"><Users/><h3>A safe corner of the internet</h3><p>Posts are anonymous. Be kind, protect your privacy, and remember that every journey looks different.</p></div><div className="panel milestones"><h3>Community today</h3><div><b>1,247</b><span>urges overcome</span></div><div><b>384</b><span>check-ins shared</span></div><div><b>92%</b><span>felt supported</span></div></div></aside></div>{open&&<SimpleModal title="Share anonymously" onClose={()=>setOpen(false)}><p>Your name and profile will never appear with this post.</p><label>Your progress<textarea placeholder="What would you like to share?"/></label><label>Choose a tag<select><option>Small win</option><option>Urge resisted</option><option>Milestone</option><option>Need support</option></select></label><button className="primary wide" onClick={()=>setOpen(false)}>Post anonymously</button></SimpleModal>}</div>}
+
+function Insights({t}:{t:ReturnType<typeof getText>}) {const hourly=[{n:'Morning',v:28},{n:'Afternoon',v:42},{n:'Evening',v:78},{n:'Late night',v:51}];return <div className="page"><PageTitle eyebrow="ANONYMOUS & AGGREGATED" title={t.insightsTitle} subtitle={t.insightsSub}/><div className="privacy-strip"><ShieldCheck/><p><b>Privacy comes first.</b> These insights never identify individual members or show personal entries.</p></div><div className="insight-stats"><article><span><Users/></span><strong>12,480</strong><small>people growing together</small></article><article><span><CalendarDays/></span><strong>18.6 days</strong><small>average bet-free streak</small></article><article><span><CircleDollarSign/></span><strong>$734</strong><small>average money saved</small></article></div><div className="insights-grid"><section className="panel"><span className="eyebrow">MOST COMMON</span><h2>What tends to trigger urges</h2><div className="horizontal-bars">{triggerData.map(x=><div key={x.name}><span>{x.name}<b>{x.value}%</b></span><i><em style={{width:`${x.value*2.25}%`,background:x.color}}/></i></div>)}</div></section><section className="panel"><span className="eyebrow">CRITICAL TIMES</span><h2>When urges feel strongest</h2><ResponsiveContainer width="100%" height={230}><BarChart data={hourly}><CartesianGrid vertical={false} stroke="#edf0ed"/><XAxis dataKey="n" axisLine={false} tickLine={false} tick={{fontSize:11}}/><YAxis hide/><Tooltip/><Bar dataKey="v" fill="#65a978" radius={[7,7,0,0]}/></BarChart></ResponsiveContainer></section><section className="panel strategy-card"><span className="eyebrow">WHAT HELPS</span><h2>Strategies people return to</h2>{[['Take a walk','68%'],['Call someone I trust','54%'],['60-second breathing reset','49%'],['Move money to savings','41%']].map(([n,v],i)=><div key={n}><span>{i+1}</span><p><b>{n}</b><small>Used successfully by {v} of members</small></p></div>)}</section></div></div>}
+
+function Pricing({t,currency,premium,onPremium}:{t:ReturnType<typeof getText>,currency:string,premium:boolean,onPremium:()=>void}) {
+  const [busy,setBusy]=useState(''), [error,setError]=useState('')
+  const rates:Record<string,number>={USD:1,BRL:5.45,EUR:.92,MXN:18.1,GBP:.79}
+  const plans:{id:'free'|BillingPlan,label:string,caption:string}[]=[
+    {id:'free',label:t.free,caption:t.freeCaption},{id:'monthly',label:t.monthly,caption:t.monthlyCaption},
+    {id:'semiannual',label:t.semiannual,caption:t.semiannualCaption},{id:'annual',label:t.annual,caption:t.bestValue},
+    {id:'lifetime',label:t.lifetime,caption:t.lifetimeCaption},
+  ]
+  const checkout=async(plan:BillingPlan|'free')=>{if(plan==='free')return;setBusy(plan);setError('');try{const result=await startCheckout(plan,currency);if(result.demo)onPremium()}catch(reason){setError(reason instanceof Error?reason.message:'Checkout could not be started.')}finally{setBusy('')}}
+  const premiumItems=[t.everythingFree,t.journalReports,t.advancedSupport,t.globalInsights]
+  return <div className="page pricing-page"><PageTitle eyebrow={t.pricingEyebrow} title={t.pricingTitle} subtitle={t.pricingSub}/><div className="pricing-currency"><Globe2 size={15}/>{t.currencyNote.replace('{currency}',currency)}</div>{error&&<div className="form-error">{error}</div>}<div className="pricing-grid">{plans.map(plan=>{const isFree=plan.id==='free',amount=basePrices[plan.id];return <article key={plan.id} className={`price-card ${plan.id==='annual'?'featured':''}`}>{plan.id==='annual'&&<span className="best-value"><Sparkles size={13}/>{t.bestValue}</span>}<span className="plan-icon">{isFree?<Leaf/>:<Crown/>}</span><h2>{plan.label}</h2><p>{plan.caption}</p><strong>{localizePrice(amount,currency,rates[currency]||1)}</strong><small>{plan.id==='monthly'?t.month:plan.id==='semiannual'?t.sixMonths:plan.id==='annual'?t.year:t.oneTime}</small><ul>{(isFree?[t.betFreeTimer,t.currentStreak,t.basicSavings]:premiumItems).map(item=><li key={item}><Check size={15}/>{item}</li>)}</ul><button className={plan.id==='annual'?'primary wide':'secondary wide'} disabled={(isFree&&!premium)||(premium&&!isFree)||busy!==''} onClick={()=>!isFree&&checkout(plan.id)}>{(isFree&&!premium)||(premium&&!isFree)?t.currentPlan:busy===plan.id?t.openingStripe:t.choosePlan}</button></article>})}</div><div className="payments-note"><ShieldCheck/><span>{t.secureCheckout}</span></div></div>
+}
+
+function NotificationSettings({t,userId}:{t:ReturnType<typeof getText>,userId:string}) {
+  const stored=JSON.parse(localStorage.getItem('gd-notifications')||'null')
+  const [enabled,setEnabled]=useState(stored?.enabled??false),[first,setFirst]=useState(stored?.first_notification_time||'09:00'),[second,setSecond]=useState(stored?.second_notification_time||'20:00'),[timezone,setTimezone]=useState(stored?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone),[saved,setSaved]=useState(false),[error,setError]=useState('')
+  const save=async()=>{setError('');try{if(enabled)await enablePush(userId);await saveNotificationPreferences(userId,{enabled,first_notification_time:first,second_notification_time:second,timezone});setSaved(true)}catch(reason){setError(reason instanceof Error?reason.message:'Preferences could not be saved.')}}
+  return <div className="page"><PageTitle eyebrow={t.notificationEyebrow} title={t.notifications} subtitle={t.notificationsSub}/><div className="settings-layout"><section className="panel notification-panel"><div className="notification-hero"><span><Bell/></span><div><h2>{t.enableNotifications}</h2><p>{t.notificationPrivate}</p></div><label className="switch"><input type="checkbox" checked={enabled} onChange={e=>{setEnabled(e.target.checked);setSaved(false)}}/><i/></label></div><div className="notification-fields"><label>{t.firstTime}<input type="time" value={first} onChange={e=>setFirst(e.target.value)}/><small>“{t.firstMessage}”</small></label><label>{t.secondTime}<input type="time" value={second} onChange={e=>setSecond(e.target.value)}/><small>“{t.secondMessage}”</small></label><label>{t.timezone}<input value={timezone} onChange={e=>setTimezone(e.target.value)}/><small>{t.detectedTimezone}</small></label></div>{error&&<div className="form-error">{error}</div>}<button className="primary" onClick={save}>{saved?<><Check size={17}/>{t.preferencesSaved}</>:t.savePreferences}</button></section><aside className="panel notification-preview"><span className="eyebrow">{t.preview}</span><h3>Green Day</h3><div className="push-preview"><img src="/favicon.png"/><p><b>{t.firstMessage}</b><small>{t.rememberWhy}</small></p><time>now</time></div><p>{t.clickNotification}</p></aside></div></div>
+}
+
+function SimpleModal({title,onClose,children}:{title:string,onClose:()=>void,children:React.ReactNode}) {return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className="simple-modal"><header><h2>{title}</h2><IconButton label="Close" onClick={onClose}><X/></IconButton></header>{children}</div></div>}
+
+function EmergencyModal({onClose,onComplete}:{onClose:()=>void,onComplete:()=>void}) {const [seconds,setSeconds]=useState(60),[phase,setPhase]=useState(0);const breathe=['Breathe in','Hold gently','Breathe out'];useMemo(()=>{if(phase!==1||seconds<=0)return;const id=setTimeout(()=>setSeconds(seconds-1),1000);return()=>clearTimeout(id)},[phase,seconds]);return <div className="modal-backdrop emergency-backdrop"><div className="emergency-modal"><header><Brand/><IconButton label="Close" onClick={onClose}><X/></IconButton></header>{phase===0&&<div className="emergency-step"><span className="calm-icon"><Heart/></span><span className="eyebrow">YOU CREATED A PAUSE</span><h1>This urge will pass.</h1><p>You do not need to make any decision right now. Stay here for one minute and let your nervous system settle.</p><button className="primary wide" onClick={()=>setPhase(1)}>Start 60-second reset <span>→</span></button><small><ShieldCheck size={14}/> Private, immediate, and judgment-free</small></div>}{phase===1&&<div className="emergency-step"><span className="eyebrow">FOLLOW THE CIRCLE</span><div className="breathing-circle"><div><strong>{seconds}</strong><small>seconds</small></div></div><h2>{breathe[Math.floor((60-seconds)/5)%3]}</h2><p>Slow is enough. Notice your feet on the floor.</p><button className="text-button" onClick={()=>{setSeconds(0);setPhase(2)}}>I’m ready to continue</button></div>}{phase===2&&<div className="emergency-step reflect"><span className="calm-icon"><BookOpen/></span><span className="eyebrow">NOTICE, DON’T JUDGE</span><h1>What are you feeling?</h1><p>Putting it into words can make the urge feel smaller.</p><textarea autoFocus placeholder="Right now I’m feeling..."/><button className="primary wide" onClick={()=>setPhase(3)}>Continue <span>→</span></button></div>}{phase===3&&<div className="emergency-step complete"><span className="success-ring"><Check/></span><span className="eyebrow">URGE OVERCOME</span><h1>You chose your progress.</h1><p>One urge lasts a moment. Your progress is worth more.</p><div className="urge-earned"><Zap/><div><small>URGES OVERCOME</small><b>19</b></div><span>+1 today</span></div><button className="primary wide" onClick={onComplete}>Back to my day</button></div>}</div></div>}
+
+function App() {
+  const [authenticated,setAuthenticated]=useState(()=>localStorage.getItem('gd-auth')==='true')
+  const requestedPage=location.pathname==='/pricing'?'pricing':new URLSearchParams(location.search).get('page')
+  const initialPage:Page=(['dashboard','goals','journal','reports','relapses','community','insights','pricing','settings'] as Page[]).includes(requestedPage as Page)?requestedPage as Page:'dashboard'
+  const [onboarding,setOnboarding]=useState(false),[page,setPage]=useState<Page>(initialPage),[language,setLanguage]=useState<Language>('en'),[emergency,setEmergency]=useState(false),[menu,setMenu]=useState(false)
+  const [userId,setUserId]=useState('demo-user'),[premium,setPremium]=useState(()=>localStorage.getItem('gd-premium')==='true'),[currency,setCurrency]=useState('USD')
+  const [userProfile,setUserProfile]=useState<SurveyAnswers|null>(()=>getStoredProfile())
+  const t=getText(language)
+  const titles:Record<Page,string>={dashboard:t.dashboard,goals:t.goals,journal:t.journal,reports:t.reports,relapses:t.relapses,community:t.community,insights:t.insights,pricing:t.pricing,settings:t.settings}
+  useEffect(()=>{if(!userProfile)setCurrency(language==='pt'?'BRL':language==='es'?'EUR':'USD')},[language,userProfile])
+  useEffect(()=>{history.replaceState({},'',page==='pricing'?'/pricing':page==='dashboard'?'/':`/?page=${page}`)},[page])
+  useEffect(()=>{const client=supabase;if(!client)return;client.auth.getSession().then(async({data})=>{if(data.session?.user){setAuthenticated(true);setUserId(data.session.user.id);const[{data:sub},{data:profile}]=await Promise.all([client.from('subscriptions').select('status').eq('user_id',data.session.user.id).maybeSingle(),client.from('profiles').select('*').eq('id',data.session.user.id).maybeSingle()]);setPremium(['active','trialing'].includes(sub?.status||''));if(profile?.survey_completed_at){setUserProfile(profile as SurveyAnswers);setCurrency(profile.currency||'USD')}}});const{data:{subscription}}=client.auth.onAuthStateChange((_event,session)=>{setAuthenticated(Boolean(session));if(session)setUserId(session.user.id)});return()=>subscription.unsubscribe()},[])
+  const login=async(isNew:boolean,email:string,password:string,profile?:ProfileInput)=>{const result=isNew?await signUp(email,password,profile!):await signIn(email,password);if(result.user)setUserId(result.user.id);localStorage.setItem('gd-auth','true');setAuthenticated(true);setOnboarding(isNew)}
+  const logout=async()=>{await authSignOut();setAuthenticated(false);setPage('dashboard')}
+  const activatePremium=()=>{localStorage.setItem('gd-premium','true');setPremium(true);setPage('dashboard')}
+  const gateCopy={feature:t.premiumFeature,sub:t.gateSub,upgrade:t.upgrade,eyebrow:t.premiumEyebrow,foot:t.gateFoot}
+  const gated=(content:React.ReactNode)=><PremiumGate premium={premium} onUpgrade={()=>setPage('pricing')} copy={gateCopy}>{content}</PremiumGate>
+  if(!authenticated)return <Auth onLogin={login} language={language} setLanguage={setLanguage}/>
+  if(onboarding)return <SurveyOnboarding language={language} setLanguage={setLanguage} userId={userId} onDone={answers=>{setUserProfile(answers);setCurrency(answers.currency);setOnboarding(false)}}/>
+  const displayName=userProfile?.display_name||'Alex Johnson'
+  return <div className="app-shell"><Sidebar page={page} setPage={setPage} t={t} onLogout={logout} open={menu} setOpen={setMenu} premium={premium}/><div className="app-content"><Header title={titles[page]} language={language} setLanguage={setLanguage} setMenu={setMenu} onOpenSettings={()=>setPage('settings')} name={displayName}/><main>{page==='dashboard'&&<Dashboard t={t} onEmergency={()=>premium?setEmergency(true):setPage('pricing')} goJournal={()=>setPage('journal')} profile={userProfile} currency={currency}/>} {page==='goals'&&<GoalsPage language={language} userId={userId} premium={premium} currency={currency} onUpgrade={()=>setPage('pricing')}/>} {page==='journal'&&gated(<Journal t={t} userId={userId}/>)} {page==='reports'&&gated(<Reports t={t}/>)} {page==='relapses'&&gated(<Relapses t={t}/>)} {page==='community'&&gated(<Community t={t}/>)} {page==='insights'&&gated(<Insights t={t}/>)} {page==='pricing'&&<Pricing t={t} currency={currency} premium={premium} onPremium={activatePremium}/>} {page==='settings'&&<SettingsPage language={language} setLanguage={setLanguage} currency={currency} setCurrency={setCurrency} userId={userId}/>}</main></div>{emergency&&<EmergencyModal onClose={()=>setEmergency(false)} onComplete={()=>setEmergency(false)}/>}</div>
+}
+
+export default App
