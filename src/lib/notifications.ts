@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { setUserItem } from './userStorage'
 
 const urlBase64ToUint8Array = (value: string) => {
   const padding = '='.repeat((4 - value.length % 4) % 4)
@@ -25,7 +26,7 @@ export async function enablePush(userId: string) {
 }
 
 export async function saveNotificationPreferences(userId: string, values: { enabled: boolean, first_notification_time: string, second_notification_time: string, timezone: string }) {
-  localStorage.setItem('gd-notifications', JSON.stringify(values))
+  setUserItem(userId, 'notifications', values)
   if (!supabase) return
   const { error } = await supabase.from('notification_preferences').upsert({ user_id: userId, ...values }, { onConflict: 'user_id' })
   if (error) throw error

@@ -23,12 +23,22 @@ npm run preview
 ## Connect Supabase
 
 1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the Supabase SQL editor.
-3. Copy `.env.example` to `.env.local`.
-4. Add the project URL and anonymous key.
-5. Enable email/password authentication in Supabase.
+2. Install the Supabase CLI, then link the project and apply every migration:
+
+   ```bash
+   supabase login
+   supabase link --project-ref your-project-ref
+   supabase db push
+   ```
+
+3. For a clean local verification, run `supabase start` followed by `supabase db reset`.
+4. Copy `.env.example` to `.env.local`.
+5. Add the project URL and publishable key.
+6. Enable email/password authentication in Supabase.
 
 Without those environment variables, the app intentionally uses mock data and browser storage. With them, authentication, profiles, check-ins, notification preferences and subscription status use Supabase.
+
+The baseline migrations create profiles, journal/check-in history, relapses, urges, goals, anonymous community support, subscriptions, notification history/preferences/devices, and badges. They also install Auth profile provisioning, indexes, validation triggers, explicit API grants, and RLS policies. Client users can only access their own private records; Stripe, scheduled push, and badge writes remain service-role operations.
 
 ## Stripe Checkout
 
@@ -86,7 +96,9 @@ src/
   i18n.ts     Language dictionaries
   styles.css  Design system and responsive layouts
 supabase/
-  schema.sql  Tables, constraints and RLS policies
+  config.toml  Local Supabase configuration
+  migrations/ Reproducible tables, triggers, grants and RLS policies
+  functions/  Stripe and push-notification Edge Functions
 ```
 
 ## Safety note

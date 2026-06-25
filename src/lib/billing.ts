@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { setUserItem } from './userStorage'
 
 export type BillingPlan = 'monthly' | 'semiannual' | 'annual' | 'lifetime'
 
@@ -12,7 +13,7 @@ export function localizePrice(amount: number, currency: string, rate = 1) {
 
 export async function startCheckout(plan: BillingPlan, currency: string) {
   if (!supabase) {
-    localStorage.setItem('gd-premium', 'true')
+    setUserItem('demo-user', 'premium', true)
     return { demo: true }
   }
   const { data, error } = await supabase.functions.invoke('create-checkout', {

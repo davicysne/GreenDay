@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { getUserItem, removeUserItem, setUserItem } from './userStorage'
 
 export type SurveyAnswers = {
   display_name: string
@@ -18,11 +19,11 @@ export type SurveyAnswers = {
   survey_completed_at: string
 }
 
-export const getStoredProfile = () => JSON.parse(localStorage.getItem('gd-profile') || 'null') as SurveyAnswers | null
+export const getStoredProfile = (userId = 'demo-user') => getUserItem<SurveyAnswers | null>(userId, 'profile', null)
 
 export async function saveSurvey(userId: string, answers: SurveyAnswers) {
-  localStorage.setItem('gd-profile', JSON.stringify(answers))
-  localStorage.removeItem('gd-goals')
+  setUserItem(userId, 'profile', answers)
+  removeUserItem(userId, 'goals')
   if (!supabase || userId === 'demo-user') return
   const { error } = await supabase.from('profiles').update(answers).eq('id', userId)
   if (error) throw error
