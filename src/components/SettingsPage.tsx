@@ -10,8 +10,8 @@ type Props = { language: Language, setLanguage: (value: Language) => void, curre
 
 export default function SettingsPage({ language, setLanguage, currency, setCurrency, userId }: Props) {
   const t = getText(language), storedProfile = getUserItem<any | null>(userId, 'profile', null), storedNotifications = getUserItem<any | null>(userId, 'notifications', null)
-  const [name,setName]=useState(storedProfile?.display_name||'Alex Johnson'),[country,setCountry]=useState(storedProfile?.country||(language==='pt'?'BR':'US')),[timezone,setTimezone]=useState(storedProfile?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone)
-  const [recoveryDate,setRecoveryDate]=useState(storedProfile?.bet_free_since||'2026-06-08'),[weeklySpend,setWeeklySpend]=useState(storedProfile?.weekly_spend||150),[theme,setTheme]=useState(localStorage.getItem('gd-theme')||'light')
+  const [name,setName]=useState(storedProfile?.display_name||''),[country,setCountry]=useState(storedProfile?.country||(language==='pt'?'BR':'US')),[timezone,setTimezone]=useState(storedProfile?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone)
+  const [recoveryDate,setRecoveryDate]=useState(storedProfile?.bet_free_since||''),[weeklySpend,setWeeklySpend]=useState(storedProfile?.weekly_spend||0),[theme,setTheme]=useState(localStorage.getItem('gd-theme')||'light')
   const [enabled,setEnabled]=useState(storedNotifications?.enabled??false),[first,setFirst]=useState(storedNotifications?.first_notification_time||'09:00'),[second,setSecond]=useState(storedNotifications?.second_notification_time||'20:00')
   const [status,setStatus]=useState<'idle'|'saving'|'success'|'error'>('idle'),[message,setMessage]=useState('')
   useEffect(()=>{if(!supabase||userId==='demo-user')return;supabase.from('profiles').select('*').eq('id',userId).maybeSingle().then(({data})=>{if(!data)return;setName(data.display_name||'');setCountry(data.country||'US');setCurrency(data.currency||'USD');setTimezone(data.timezone||timezone);setRecoveryDate(data.bet_free_since||'');setWeeklySpend(data.weekly_spend||0)})},[userId])
